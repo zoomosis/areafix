@@ -558,12 +558,7 @@ char * available(s_link * link, char * cmdline)
             {
                 if((link->availlist != AVAILLIST_UNIQUE) || (isuplink))
                 {
-                    if(!sortAreaListNoDupes(halcnt, hal, link->availlist != AVAILLIST_FULL))
-                    {
-                        nfree(line);
-                        nfree(hal);
-                        return NULL;
-                    }
+                    sortAreaListNoDupes(halcnt, hal, link->availlist != AVAILLIST_FULL);
 
                     if((hal[halcnt - 1])->count)
                     {
