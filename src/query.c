@@ -195,7 +195,7 @@ void del_tok(char ** ac, char * tok)
 char * makeAreaParam(s_link * creatingLink, s_link_robot * r, char * c_area, char * msgbDir)
 {
     char * msgbFileName = NULL;
-    char * msgbtype, * newAC = NULL, * desc, * quote_areaname;
+    char /* *msgbtype, */ * newAC = NULL, * desc, * quote_areaname;
     char * cp, * buff = NULL, * d_area;               /* temp. usage */
 
     msgbFileName = makeMsgbFileName(af_config, c_area);
@@ -225,7 +225,7 @@ char * makeAreaParam(s_link * creatingLink, s_link_robot * r, char * c_area, cha
         xstrscat(&newAC, " ", r->autoCreateDefaults, NULLP);
     }
 
-    msgbtype = fc_stristr(newAC, "-b ");
+    /* msgbtype = fc_stristr(newAC, "-b "); msgbtype is set but not used */
 
     if(!msgbDir)
     {
@@ -434,6 +434,7 @@ e_BadmailReasons autoCreate(char * c_area, char * descr, hs_addr pktOrigAddr, ps
         {
             if(stricmp(areaNode->type, czKillArea) == 0)
             {
+                fclose(f);
                 w_log(LL_FUNC, "%s::autoCreate() rc=%d", __FILE__, BM_AREA_KILLED);
                 return BM_AREA_KILLED;  /*  area already unsubscribed */
             }
@@ -441,6 +442,7 @@ e_BadmailReasons autoCreate(char * c_area, char * descr, hs_addr pktOrigAddr, ps
             if(stricmp(areaNode->type, czFreqArea) == 0 &&
                addrComp(&pktOrigAddr, &(areaNode->downlinks[0])) != 0)
             {
+                fclose(f);
                 w_log(LL_FUNC, "%s::autoCreate() rc=%d", __FILE__, BM_WRONG_LINK_TO_AUTOCREATE);
                 return BM_WRONG_LINK_TO_AUTOCREATE;  /*  wrong link to autocreate from */
             }
@@ -540,6 +542,7 @@ e_BadmailReasons autoCreate(char * c_area, char * descr, hs_addr pktOrigAddr, ps
                 w_log(LL_ERROR, "cannot make all subdirectories for %s\n", fileechoFileName);
                 nfree(buff);
                 w_log(LL_FUNC, "%s::autoCreate() rc=%d", __FILE__, BM_CANT_CREATE_PATH);
+                fclose(f);
                 return BM_CANT_CREATE_PATH;
             }
 
@@ -678,7 +681,7 @@ e_BadmailReasons autoCreate(char * c_area, char * descr, hs_addr pktOrigAddr, ps
     /*  fix if dummys del \n from the end of file */
     if(fseek(f, -2L, SEEK_END) == 0)
     {
-        CR = getc(f);  /*   may be it is CR aka '\r'  */
+        CR = (char)getc(f);  /*   may be it is CR aka '\r'  */
 
         if(getc(f) != '\n')
         {
@@ -712,7 +715,7 @@ e_BadmailReasons autoCreate(char * c_area, char * descr, hs_addr pktOrigAddr, ps
     {
         w_log(LL_ERR, "Error creating area %s, config write failed: %s!", c_area, strerror(errno));
         fseek(f, i, SEEK_SET);
-        setfsize(fileno(f), i);
+        setfsize(fileno(f), (long)i);
     }
 
     fclose(f);
@@ -978,7 +981,7 @@ char * af_Req2Idle(char * areatag, char * report, hs_addr linkAddr)
                 }
 
                 xscatprintf(&report, " %s %s  request canceled\r", areaNode->name,
-                            print_ch(49 - strlen(areaNode->name), '.'));
+                            print_ch((int)(49 - strlen(areaNode->name)), '.'));
                 w_log(LL_AREAFIX,
                       "%s: request canceled for [%s] area: %s",
                       af_robot->name,
@@ -1112,7 +1115,7 @@ void af_QueueReport()
             }
             else
             {
-                int days = (tnow - tmpNode->bTime) / secInDay;
+                int days = (int)((tnow - tmpNode->bTime) / secInDay);
                 sprintf(state, "%2d days", days);
             }
 
@@ -1140,7 +1143,7 @@ void af_QueueReport()
             }
             else
             {
-                int days = (tnow - tmpNode->bTime) / secInDay;
+                int days = (int)((tnow - tmpNode->bTime) / secInDay);
                 sprintf(state, "%2d days", days);
             }
 
@@ -1168,7 +1171,7 @@ void af_QueueReport()
             }
             else
             {
-                int days = (tnow - tmpNode->bTime) / secInDay;
+                int days = (int)((tnow - tmpNode->bTime) / secInDay);
                 sprintf(state, "%2d days", days);
             }
 
@@ -1291,7 +1294,7 @@ void af_QueueUpdate()
                   tmpNode->name,
                   aka2str(&lastRlink->hisAka));
 
-            if(dwlink && !forwardRequest(tmpNode->name, dwlink, &lastRlink))
+            if(dwlink && forwardRequest(tmpNode->name, dwlink, &lastRlink) == OK_FORWARDED)
             {
                 tmpNode->downlinks[0] = lastRlink->hisAka;
                 tmpNode->bTime        = tnow;
@@ -1426,7 +1429,7 @@ void af_QueueUpdate()
         if(tmpmsg[i])
         {
             xscatprintf(&tmpmsg[i]->text, "\r\r--- %s %s\r", af_versionStr, af_robot->name);
-            tmpmsg[i]->textLength = strlen(tmpmsg[i]->text);
+            tmpmsg[i]->textLength = (hINT32)strlen(tmpmsg[i]->text);
 /*
             processNMMsg(tmpmsg[i], NULL,
                 getNetMailArea(af_config,af_config->robotsArea),
@@ -1446,17 +1449,18 @@ void af_QueueUpdate()
     w_log(LL_STOP, "End updating queue file");
 } /* af_QueueUpdate */
 
-int af_OpenQuery()
+void af_OpenQuery()
 {
     FILE * queryFile;
     char * line  = NULL;
     char * token = NULL;
     struct  tm tr;
     char seps[] = " \t\n";
+    int is_error = 0;
 
     if(queryAreasHead)    /*  list already exists */
     {
-        return 0;
+        return;
     }
 
     time(&tnow);
@@ -1465,13 +1469,13 @@ int af_OpenQuery()
     if(!af_robot->queueFile)   /* Queue File not defined in af_config */
     {
         w_log(LL_ERR, "queueFile for %s not defined in af_config", af_robot->name);
-        return 0;
+        return;
     }
 
     if((queryFile = fopen(af_robot->queueFile, "r")) == NULL)   /* can't open query file */
     {
         w_log(LL_ERR, "Can't open queueFile %s: %s", af_robot->queueFile, strerror(errno));
-        return 0;
+        return;
     }
 
     while((line = readLine(queryFile)) != NULL)
@@ -1489,8 +1493,20 @@ int af_OpenQuery()
             }
 
             token = strtok(NULL, seps);
+            if(token == NULL)
+            {
+                is_error = 1;
+                break;
+            }
+
             strncpy(areaNode->type, token, 4);
             token = strtok(NULL, seps);
+            if (token == NULL)
+            {
+                is_error = 1;
+                break;
+            }
+
             memset(&tr, '\0', sizeof(tr));
 
             if(sscanf(token, "%d-%d-%d@%d:%d", &tr.tm_year, &tr.tm_mon, &tr.tm_mday, &tr.tm_hour,
@@ -1508,6 +1524,11 @@ int af_OpenQuery()
             }
 
             token = strtok(NULL, seps);
+            if (token == NULL)
+            {
+                is_error = 1;
+                break;
+            }
             memset(&tr, '\0', sizeof(tr));
 
             if(sscanf(token, "%d-%d-%d@%d:%d", &tr.tm_year, &tr.tm_mon, &tr.tm_mday, &tr.tm_hour,
@@ -1539,11 +1560,15 @@ int af_OpenQuery()
 
         nfree(line);
     }
+
+    if(is_error)
+    {
+        w_log(LL_ERR, "Broken format of the queue file %s\n", af_robot->queueFile);
+    }
     fclose(queryFile);
-    return 0;
 } /* af_OpenQuery */
 
-int af_CloseQuery()
+void af_CloseQuery()
 {
     char buf[2 * 1024] = "";
     char * p;
@@ -1562,7 +1587,7 @@ int af_CloseQuery()
     if(!queryAreasHead)      /*  list does not exist */
     {
         w_log(LL_FUNC, __FILE__ ":%u:af_CloseQuery() end", __LINE__);
-        return 0;
+        return;
     }
 
     if(queryAreasHead->nFlag == 1)
@@ -1592,7 +1617,7 @@ int af_CloseQuery()
     }
 
     tmpNode = queryAreasHead->next;
-    nSpace  = queryAreasHead->linksCount + 1;
+    nSpace  = (int)queryAreasHead->linksCount + 1;
     p       = buf + nSpace;
 
     while(tmpNode)
@@ -1600,7 +1625,7 @@ int af_CloseQuery()
         if(writeChanges && tmpNode->type[0] != '\0')
         {
             memset(buf, ' ', nSpace);
-            memcpy(buf, tmpNode->name, strlen(tmpNode->name));
+            strncpy(buf, tmpNode->name, strlen(tmpNode->name));
             t1 = *localtime(&tmpNode->bTime);
             t2 = *localtime(&tmpNode->eTime);
             sprintf(p,
@@ -1643,7 +1668,6 @@ int af_CloseQuery()
     }
 
     w_log(LL_FUNC, __FILE__ ":%u:af_CloseQuery() end", __LINE__);
-    return 0;
 } /* af_CloseQuery */
 
 s_query_areas * af_MakeAreaListNode()
@@ -1667,9 +1691,9 @@ s_query_areas * af_AddAreaListNode(char * areatag, const char * type)
 
     while(tmpNode)
     {
-        if(tmpNode->name && strlen(tmpNode->name) > 0)
+        if(tmpNode->name && tmpNode->name[0] != '\0')
         {
-            if(stricmp(areatag, tmpNode->name) < 0)
+            if(areatag && stricmp(areatag, tmpNode->name) < 0)
             {
                 break;
             }
